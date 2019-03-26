@@ -27,6 +27,107 @@ function power_bi_reports_menu() {
 }
 
 /**
+ * Implements hook_field_info().
+ */
+function power_bi_reports_field_info() {
+  $info = [];
+  $info['power_bi_reports_report'] = [
+    'label' => t('Power BI Report'),
+    'description' => t('Hosts a Power BI Report.'),
+    'default_widget' => 'power_bi_reports_select_widget',
+    'default_formatter' => 'power_bi_reports_simple_embed_formatter',
+  ];
+  return $info;
+}
+
+/**
+ * Implements hook_field_is_empty().
+ */
+function power_bi_reports_field_is_empty($item, $field) {
+  return empty($item['report_id']) ||
+    empty($item['group_id']) ||
+    empty($item['web_url']) ||
+    empty($item['embed_url']) ||
+    empty($item['dataset_id']);
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function power_bi_reports_field_formatter_info() {
+  $info = [];
+  $info['power_bi_reports_simple_embed_formatter'] = [
+    'label' => t('Simple text-based formatter'),
+    'field types' => ['power_bi_reports_report'],
+  ];
+  return $info;
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function power_bi_reports_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $element = [];
+
+  // https://community.powerbi.com/t5/Service/How-to-Embed-Power-BI-Reports-into-Drupal-based-website/td-p/575822
+  // https://docs.microsoft.com/en-us/power-bi/developer/embed-sample-for-customers
+
+  switch ($display['type']) {
+    // This formatter simply outputs the field as text and with a color.
+    case 'power_bi_reports_simple_embed_formatter':
+      foreach ($items as $delta => $item) {
+        $element[$delta] = [
+          // We create a render array to produce the desired markup,
+          // "<p style="color: #hexcolor">The color code ... #hexcolor</p>".
+          // See theme_html_tag().
+          '#type' => 'html_tag',
+          '#tag' => 'p',
+          '#attributes' => [
+            'style' => 'color: ' . $item['rgb'],
+          ],
+          '#value' => t('The color code in this field is code'),
+        ];
+      }
+      break;
+  }
+
+  return $element;
+}
+
+/**
+ * Implements hook_field_widget_info().
+ */
+function power_bi_reports_field_widget_info() {
+  $info = [];
+  $info['power_bi_reports_select_widget'] = [
+    'label' => t('Select'),
+    'field types' => ['power_bi_reports_report'],
+  ];
+  return $info;
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function power_bi_reports_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+  $value = isset($items[$delta]['rgb']) ? $items[$delta]['rgb'] : '';
+
+  $widget = $element;
+  $widget['#delta'] = $delta;
+
+  switch ($instance['widget']['type']) {
+
+    case 'power_bi_reports_select_widget':
+      $form += power_bi_reports_get_form_elements($form, $form_state);
+      break;
+
+  }
+
+  $element['rgb'] = $widget;
+  return $element;
+}
+
+/**
  * Menu callback to configure module settings.
  */
 function power_bi_reports_admin_form($form, &$form_state) {
@@ -54,7 +155,7 @@ function power_bi_reports_admin_form($form, &$form_state) {
     '#default_value' => variable_get('power_bi_reports_username'),
     '#required' => TRUE,
   ];
-  $form['power_bi_reports_password'] = [
+  $form['power_bi_reports_password'] = [ // @TODO fix this
     '#type' => 'password',
     '#title' => t('Password'),
     '#default_value' => variable_get('power_bi_reports_password'),
@@ -74,7 +175,7 @@ function power_bi_reports_get_form_elements($form, &$form_state) {
   $response = $client->generateResponse($req);
   $resp_array = $response->toArray();
 
-  $selected_group = isset($form_state['values']['groups']) ? $form_state['values']['groups'] : 0;
+  $selected_group = isset($form_state['values']['groups']) ? $form_state['values']['groups'] : '';
   $form['groups'] = [
     '#type' => 'select',
     '#title' => t('Groups'),
@@ -93,6 +194,7 @@ function power_bi_reports_get_form_elements($form, &$form_state) {
     '#prefix' => '<div id="dropdown-reports-replace">',
     '#suffix' => '</div>',
     '#empty_value' => '',
+    '#default_value' => isset($form_state['values']['reports']) ? $form_state['values']['reports'] : '',
   ];
   if ($selected_group) {
     $reports_options = _power_bi_reports_get_reports_options($selected_group, $client);
@@ -116,10 +218,7 @@ function power_bi_reports_status_form($form, &$form_state) {
 
   $form += power_bi_reports_get_form_elements($form, $form_state);
 
-//  $groups = _power_bi_reports_normalize_groups($resp_array['value']);
-
-
-
+  //  $groups = _power_bi_reports_normalize_groups($resp_array['value']);
   return $form;
 }
 
