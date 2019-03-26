@@ -1,0 +1,53 @@
+<?php
+
+/**
+ * @file
+ * Install, update, and uninstall functions for the power_bi_reports module.
+ */
+
+/**
+ * Implements hook_field_schema().
+ *
+ * Defines the database schema of the field, using the format used by the
+ * Schema API.
+ *
+ * @see http://drupal.org/node/146939
+ * @see schemaapi
+ * @see hook_field_schema()
+ */
+function power_bi_reports_field_schema($field) {
+  $columns = [
+    'report_id' => [
+      'type' => 'varchar',
+      'length' => 63,
+      'not null' => TRUE,
+    ],
+    'group_id' => [
+      'type' => 'varchar',
+      'length' => 63,
+      'not null' => TRUE,
+    ],
+    'web_url' => [
+      'type' => 'varchar',
+      'length' => 127,
+      'not null' => TRUE,
+    ],
+    'embed_url' => [
+      'type' => 'varchar',
+      'length' => 511,
+      'not null' => TRUE,
+    ],
+    'dataset_id' => [
+      'type' => 'varchar',
+      'length' => 63,
+      'not null' => TRUE,
+    ],
+  ];
+  $indexes = [
+    'report_id' => ['report_id'],
+  ];
+  return [
+    'columns' => $columns,
+    'indexes' => $indexes,
+  ];
+}
