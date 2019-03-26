@@ -1,0 +1,7 @@
+name = Power BI Reports
+description = Provides field type and blocks for embedding Power BI Reports.
+core = 7.x
+
+dependencies[] = composer_manager
+
+configure = admin/config/services/power-bi-reports
