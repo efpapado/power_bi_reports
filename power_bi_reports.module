@@ -1,5 +1,8 @@
 <?php
 
+define('POWER_BI_REPORTS__GROUPS', 'https://api.powerbi.com/v1.0/myorg/groups');
+define('POWER_BI_REPORTS__REPORTS_IN_GROUP', 'https://api.powerbi.com/v1.0/myorg/groups/{groupId}/reports');
+
 /**
  * Implements hook_menu().
  *
@@ -13,15 +16,20 @@ function power_bi_reports_menu() {
     'page arguments' => ['power_bi_reports_admin_form'],
     'description' => 'Configure Power BI Reports module.',
   ];
+  $items['admin/config/services/power-bi-reports/status'] = [
+    'title' => 'Power BI Reports',
+    'access arguments' => ['administer site configuration'], // @TODO
+    'page callback' => 'drupal_get_form',
+    'page arguments' => ['power_bi_reports_status_form'],
+    'description' => 'Power BI Reports status.',
+  ];
   return $items;
-
 }
 
 /**
  * Menu callback to configure module settings.
  */
 function power_bi_reports_admin_form($form, &$form_state) {
-
   $form['power_bi_reports_tenant_id'] = [
     '#type' => 'textfield',
     '#title' => t('Tenant ID'),
@@ -54,6 +62,82 @@ function power_bi_reports_admin_form($form, &$form_state) {
   ];
 
   return system_settings_form($form);
+}
+
+function power_bi_reports_get_form_elements($form, &$form_state) {
+  $form = [];
+  // Get a token.
+  $token = power_bi_reports_get_auth_token();
+
+  $client = new \Tngnt\PBI\Client($token);
+  $req = $client->request('GET', POWER_BI_REPORTS__GROUPS);
+  $response = $client->generateResponse($req);
+  $resp_array = $response->toArray();
+
+  $selected_group = isset($form_state['values']['groups']) ? $form_state['values']['groups'] : 0;
+  $form['groups'] = [
+    '#type' => 'select',
+    '#title' => t('Groups'),
+    '#options' => _power_bi_reports_get_groups_options($resp_array['value']),
+    '#empty_value' => '',
+    '#default_value' => $selected_group,
+    '#ajax' => [
+      'callback' => '_power_bi_reports_reports_ajax_callback',
+      'wrapper' => 'dropdown-reports-replace',
+    ],
+  ];
+
+  $form['reports'] = [
+    '#type' => 'select',
+    '#title' => t('Reports'),
+    '#prefix' => '<div id="dropdown-reports-replace">',
+    '#suffix' => '</div>',
+    '#empty_value' => '',
+  ];
+  if ($selected_group) {
+    $reports_options = _power_bi_reports_get_reports_options($selected_group, $client);
+    $form['reports']['#options'] = $reports_options;
+  }
+  else {
+    $form['reports']['#options'] = [];
+    $form['reports']['#disabled'] = TRUE;
+    $form['reports']['#description'] = t('You must select a group in order to see the available reports.');
+  }
+
+  return $form;
+}
+
+function power_bi_reports_status_form($form, &$form_state) {
+  $form = [];
+
+  $form['token_renew'] = [
+    '#markup' => '@TODO create a token renew button',
+  ];
+
+  $form += power_bi_reports_get_form_elements($form, $form_state);
+
+//  $groups = _power_bi_reports_normalize_groups($resp_array['value']);
+
+
+
+  return $form;
+}
+
+function _power_bi_reports_reports_ajax_callback($form, $form_state) {
+  return $form['reports'];
+}
+
+function _power_bi_reports_get_reports_options($group_id, \Tngnt\PBI\Client $client) {
+  $reports_options = [];
+  $endpoint = str_replace('{groupId}', $group_id, POWER_BI_REPORTS__REPORTS_IN_GROUP);
+  $req = $client->request('GET', $endpoint);
+  $response = $client->generateResponse($req);
+  $resp_array = $response->toArray();
+  $reports_raw = $resp_array['value'];
+  foreach ($reports_raw as $report_raw) {
+    $reports_options[$report_raw['id']] = $report_raw['name'];
+  }
+  return $reports_options;
 }
 
 /**
@@ -115,3 +199,24 @@ function power_bi_reports_get_auth_token($force_renew = FALSE) {
     return $token['token'];
   }
 }
+
+function _power_bi_reports_get_groups_options($groups_raw) {
+  $groups_options = [];
+  foreach ($groups_raw as $group_raw) {
+    $groups_options[$group_raw['id']] = $group_raw['name'];
+  }
+  asort($groups_options);
+  return $groups_options;
+}
+
+function _power_bi_reports_normalize_groups($groups) {
+  $groups_sorted = [];
+  foreach ($groups as $group) {
+    $groups_sorted[$group['id']] = ['name' => $group['name']];
+  }
+  uasort($groups_sorted, function ($a, $b) {
+    return $a['name'] > $b['name'];
+  });
+  return $groups_sorted;
+}
+
