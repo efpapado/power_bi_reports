@@ -1,2 +1,117 @@
 <?php
 
+/**
+ * Implements hook_menu().
+ *
+ * Provides a configuration page.
+ */
+function power_bi_reports_menu() {
+  $items['admin/config/services/power-bi-reports'] = [
+    'title' => 'Power BI Reports',
+    'access arguments' => ['administer site configuration'], // @TODO
+    'page callback' => 'drupal_get_form',
+    'page arguments' => ['power_bi_reports_admin_form'],
+    'description' => 'Configure Power BI Reports module.',
+  ];
+  return $items;
+
+}
+
+/**
+ * Menu callback to configure module settings.
+ */
+function power_bi_reports_admin_form($form, &$form_state) {
+
+  $form['power_bi_reports_tenant_id'] = [
+    '#type' => 'textfield',
+    '#title' => t('Tenant ID'),
+    '#default_value' => variable_get('power_bi_reports_tenant_id'),
+    '#required' => TRUE,
+  ];
+  $form['power_bi_reports_resource'] = [
+    '#type' => 'textfield',
+    '#title' => t('Resource'),
+    '#default_value' => variable_get('power_bi_reports_resource', 'https://analysis.windows.net/powerbi/api'),
+    '#required' => TRUE,
+  ];
+  $form['power_bi_reports_client_id'] = [
+    '#type' => 'textfield',
+    '#title' => t('Client ID'),
+    '#default_value' => variable_get('power_bi_reports_client_id'),
+    '#required' => TRUE,
+  ];
+  $form['power_bi_reports_username'] = [
+    '#type' => 'textfield',
+    '#title' => t('Username'),
+    '#default_value' => variable_get('power_bi_reports_username'),
+    '#required' => TRUE,
+  ];
+  $form['power_bi_reports_password'] = [
+    '#type' => 'password',
+    '#title' => t('Password'),
+    '#default_value' => variable_get('power_bi_reports_password'),
+    '#required' => TRUE,
+  ];
+
+  return system_settings_form($form);
+}
+
+/**
+ * Gets a valid auth token.
+ *
+ * @param bool $force_renew
+ *
+ * @return mixed|void
+ */
+function power_bi_reports_get_auth_token($force_renew = FALSE) {
+  // First check if there's a non-expired cached auth token.
+  $access_token = variable_get('power_bi_reports_access_token', [
+    'expires' => 0,
+    'token' => '',
+  ]);
+
+  $expires = $access_token['expires'];
+  if (!$force_renew && $expires > REQUEST_TIME) {
+    // There's a token that hasn't expired, use this.
+    return $access_token['token'];
+  }
+  else {
+    // Get a new token.
+    $client = new GuzzleHttp\Client();
+
+    $tenant_id = variable_get('power_bi_reports_tenant_id');
+    $endpoint = "https://login.windows.net/$tenant_id/oauth2/token";
+    $resource = variable_get('power_bi_reports_resource');
+    $client_id = variable_get('power_bi_reports_client_id');
+    $username = variable_get('power_bi_reports_username');
+    $password = variable_get('power_bi_reports_password');
+
+    $r = $client->post(
+      $endpoint,
+      [
+        'form_params' => [
+          'resource' => $resource,
+          'client_id' => $client_id,
+          'grant_type' => 'password',
+          'username' => $username,
+          'password' => $password,
+          'scope' => 'openid',
+        ],
+      ]
+    );
+
+    if ($r->getStatusCode() != 200) {
+      // @TODO handle error and return
+      return;
+    }
+
+    $response_json = json_decode($r->getBody());
+    $token = [
+      'expires' => $response_json->expires_on,
+      'token' => $response_json->access_token,
+    ];
+
+    variable_set('power_bi_reports_access_token', $token);
+    return $token['token'];
+  }
+}
