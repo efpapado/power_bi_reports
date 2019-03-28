@@ -51,84 +51,32 @@ function power_bi_reports_field_is_empty($item, $field) {
  * Implements hook_field_widget_info().
  */
 function power_bi_reports_field_widget_info() {
-  $info = [];
-  $info['power_bi_reports_select_widget'] = [
-    'label' => t('Select'),
-    'field types' => ['power_bi_reports_report'],
-  ];
-  return $info;
+  require_once 'power_bi_reports.widgets.inc';
+  return _power_bi_reports_field_widget_info();
 }
 
 /**
  * Implements hook_field_widget_form().
  */
 function power_bi_reports_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
-  $value = isset($items[$delta]['report_id']) ? $items[$delta]['report_id'] : '';
-
-  $widget = $element;
-  $widget['#delta'] = $delta;
-
-  switch ($instance['widget']['type']) {
-    case 'power_bi_reports_select_widget':
-      $element['report_id'] = power_bi_reports_get_form_element($form, $form_state, $value);
-      break;
-  }
-
-  return $element;
-}
-
-function _power_bi_reports_get_grouped_options($power_bi_reports_data) {
-  $options = [];
-  foreach ($power_bi_reports_data as $group) {
-    foreach ($group['reports'] as $report) {
-      $options[$group['name']][$report['id']] = $report['name'];
-    }
-  }
-  return $options;
+  require_once 'power_bi_reports.widgets.inc';
+  return _power_bi_reports_field_widget_form($form, $form_state, $field, $instance, $langcode, $items, $delta, $element);
 }
 
 /**
  * Implements hook_field_formatter_info().
  */
 function power_bi_reports_field_formatter_info() {
-  $info = [];
-  $info['power_bi_reports_simple_embed_formatter'] = [
-    'label' => t('Simple text-based formatter'),
-    'field types' => ['power_bi_reports_report'],
-  ];
-  return $info;
+  require_once 'power_bi_reports.formatters.inc';
+  return _power_bi_reports_field_formatter_info();
 }
 
 /**
  * Implements hook_field_formatter_view().
  */
 function power_bi_reports_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
-  $element = [];
-
-  // https://community.powerbi.com/t5/Service/How-to-Embed-Power-BI-Reports-into-Drupal-based-website/td-p/575822
-  // https://docs.microsoft.com/en-us/power-bi/developer/embed-sample-for-customers
-
-  switch ($display['type']) {
-    // This formatter simply outputs the field as text and with a color.
-    case 'power_bi_reports_simple_embed_formatter':
-      foreach ($items as $delta => $item) {
-        $report_id = $item['report_id'];
-        $element[$delta] = [
-          // We create a render array to produce the desired markup,
-          // "<p style="color: #hexcolor">The color code ... #hexcolor</p>".
-          // See theme_html_tag().
-          '#type' => 'html_tag',
-          '#tag' => 'p',
-          '#attributes' => [
-            'style' => 'color: ' . $item['rgb'],
-          ],
-          '#value' => t('The color code in this field is code'),
-        ];
-      }
-      break;
-  }
-
-  return $element;
+  require_once 'power_bi_reports.formatters.inc';
+  return _power_bi_reports_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display);
 }
 
 /**
