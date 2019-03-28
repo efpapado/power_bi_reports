@@ -19,27 +19,7 @@ function power_bi_reports_field_schema($field) {
   $columns = [
     'report_id' => [
       'type' => 'varchar',
-      'length' => 63,
-      'not null' => TRUE,
-    ],
-    'group_id' => [
-      'type' => 'varchar',
-      'length' => 63,
-      'not null' => TRUE,
-    ],
-    'web_url' => [
-      'type' => 'varchar',
-      'length' => 127,
-      'not null' => TRUE,
-    ],
-    'embed_url' => [
-      'type' => 'varchar',
-      'length' => 511,
-      'not null' => TRUE,
-    ],
-    'dataset_id' => [
-      'type' => 'varchar',
-      'length' => 63,
+      'length' => 36,
       'not null' => TRUE,
     ],
   ];
