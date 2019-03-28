@@ -44,11 +44,47 @@ function power_bi_reports_field_info() {
  * Implements hook_field_is_empty().
  */
 function power_bi_reports_field_is_empty($item, $field) {
-  return empty($item['report_id']) ||
-    empty($item['group_id']) ||
-    empty($item['web_url']) ||
-    empty($item['embed_url']) ||
-    empty($item['dataset_id']);
+  return empty($item['report_id']);
+}
+
+/**
+ * Implements hook_field_widget_info().
+ */
+function power_bi_reports_field_widget_info() {
+  $info = [];
+  $info['power_bi_reports_select_widget'] = [
+    'label' => t('Select'),
+    'field types' => ['power_bi_reports_report'],
+  ];
+  return $info;
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function power_bi_reports_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+  $value = isset($items[$delta]['report_id']) ? $items[$delta]['report_id'] : '';
+
+  $widget = $element;
+  $widget['#delta'] = $delta;
+
+  switch ($instance['widget']['type']) {
+    case 'power_bi_reports_select_widget':
+      $element['report_id'] = power_bi_reports_get_form_element($form, $form_state, $value);
+      break;
+  }
+
+  return $element;
+}
+
+function _power_bi_reports_get_grouped_options($power_bi_reports_data) {
+  $options = [];
+  foreach ($power_bi_reports_data as $group) {
+    foreach ($group['reports'] as $report) {
+      $options[$group['name']][$report['id']] = $report['name'];
+    }
+  }
+  return $options;
 }
 
 /**
@@ -76,6 +112,7 @@ function power_bi_reports_field_formatter_view($entity_type, $entity, $field, $i
     // This formatter simply outputs the field as text and with a color.
     case 'power_bi_reports_simple_embed_formatter':
       foreach ($items as $delta => $item) {
+        $report_id = $item['report_id'];
         $element[$delta] = [
           // We create a render array to produce the desired markup,
           // "<p style="color: #hexcolor">The color code ... #hexcolor</p>".
@@ -91,39 +128,6 @@ function power_bi_reports_field_formatter_view($entity_type, $entity, $field, $i
       break;
   }
 
-  return $element;
-}
-
-/**
- * Implements hook_field_widget_info().
- */
-function power_bi_reports_field_widget_info() {
-  $info = [];
-  $info['power_bi_reports_select_widget'] = [
-    'label' => t('Select'),
-    'field types' => ['power_bi_reports_report'],
-  ];
-  return $info;
-}
-
-/**
- * Implements hook_field_widget_form().
- */
-function power_bi_reports_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
-  $value = isset($items[$delta]['rgb']) ? $items[$delta]['rgb'] : '';
-
-  $widget = $element;
-  $widget['#delta'] = $delta;
-
-  switch ($instance['widget']['type']) {
-
-    case 'power_bi_reports_select_widget':
-      $form += power_bi_reports_get_form_elements($form, $form_state);
-      break;
-
-  }
-
-  $element['rgb'] = $widget;
   return $element;
 }
 
@@ -165,48 +169,21 @@ function power_bi_reports_admin_form($form, &$form_state) {
   return system_settings_form($form);
 }
 
-function power_bi_reports_get_form_elements($form, &$form_state) {
-  $form = [];
-  // Get a token.
-  $token = power_bi_reports_get_auth_token();
-
-  $client = new \Tngnt\PBI\Client($token);
-  $req = $client->request('GET', POWER_BI_REPORTS__GROUPS);
-  $response = $client->generateResponse($req);
-  $resp_array = $response->toArray();
-
-  $selected_group = isset($form_state['values']['groups']) ? $form_state['values']['groups'] : '';
-  $form['groups'] = [
-    '#type' => 'select',
-    '#title' => t('Groups'),
-    '#options' => _power_bi_reports_get_groups_options($resp_array['value']),
-    '#empty_value' => '',
-    '#default_value' => $selected_group,
-    '#ajax' => [
-      'callback' => '_power_bi_reports_reports_ajax_callback',
-      'wrapper' => 'dropdown-reports-replace',
-    ],
-  ];
-
-  $form['reports'] = [
-    '#type' => 'select',
-    '#title' => t('Reports'),
-    '#prefix' => '<div id="dropdown-reports-replace">',
-    '#suffix' => '</div>',
-    '#empty_value' => '',
-    '#default_value' => isset($form_state['values']['reports']) ? $form_state['values']['reports'] : '',
-  ];
-  if ($selected_group) {
-    $reports_options = _power_bi_reports_get_reports_options($selected_group, $client);
-    $form['reports']['#options'] = $reports_options;
-  }
-  else {
-    $form['reports']['#options'] = [];
-    $form['reports']['#disabled'] = TRUE;
-    $form['reports']['#description'] = t('You must select a group in order to see the available reports.');
+function power_bi_reports_get_form_element($form, &$form_state, $default_value = '') {
+  $power_bi_reports_data = variable_get('power_bi_reports_data', FALSE);
+  if (!$power_bi_reports_data) {
+    $power_bi_reports_data = power_bi_reports_sync_reports();
   }
 
-  return $form;
+  $element = [
+    '#type' => 'select',
+    '#title' => t('Report'),
+    '#options' => _power_bi_reports_get_grouped_options($power_bi_reports_data),
+    '#empty_value' => '',
+    '#default_value' => $default_value,
+  ];
+
+  return $element;
 }
 
 function power_bi_reports_status_form($form, &$form_state) {
@@ -216,28 +193,62 @@ function power_bi_reports_status_form($form, &$form_state) {
     '#markup' => '@TODO create a token renew button',
   ];
 
-  $form += power_bi_reports_get_form_elements($form, $form_state);
+  $form['reports'] = power_bi_reports_get_form_element($form, $form_state);
 
-  //  $groups = _power_bi_reports_normalize_groups($resp_array['value']);
+  $form['submit'] = [
+    '#type' => 'submit',
+    '#value' => 'Submit',
+  ];
+
   return $form;
 }
 
-function _power_bi_reports_reports_ajax_callback($form, $form_state) {
-  return $form['reports'];
+function power_bi_reports_status_form_submit($form, &$form_state) {
+  dpm($form, '$form');
+  dpm($form_state['values'], '$form_state values');
 }
 
-function _power_bi_reports_get_reports_options($group_id, \Tngnt\PBI\Client $client) {
-  $reports_options = [];
-  $endpoint = str_replace('{groupId}', $group_id, POWER_BI_REPORTS__REPORTS_IN_GROUP);
-  $req = $client->request('GET', $endpoint);
-  $response = $client->generateResponse($req);
-  $resp_array = $response->toArray();
-  $reports_raw = $resp_array['value'];
-  foreach ($reports_raw as $report_raw) {
-    $reports_options[$report_raw['id']] = $report_raw['name'];
+
+function power_bi_reports_sync_reports() {
+  $groups = [];
+  // Get a token.
+  $token = power_bi_reports_get_auth_token();
+
+  // @TODO rename variables
+
+  $client = new \Tngnt\PBI\Client($token);
+  $greq = $client->request('GET', POWER_BI_REPORTS__GROUPS);
+  $gresponse = $client->generateResponse($greq);
+  $gresp_array = $gresponse->toArray();
+  $groups_raw = $gresp_array['value'];
+
+  foreach ($groups_raw as $group) {
+    $group_id = $group['id'];
+    $endpoint = str_replace('{groupId}', $group_id, POWER_BI_REPORTS__REPORTS_IN_GROUP);
+    $rreq = $client->request('GET', $endpoint);
+    $rresponse = $client->generateResponse($rreq);
+    $rresp_array = $rresponse->toArray();
+    $reports = $rresp_array['value'];
+    $groups[$group_id] = $group;
+    $groups[$group_id]['reports'] = $reports;
   }
-  return $reports_options;
+  variable_set('power_bi_reports_data', $groups);
+  variable_set('power_bi_reports_last_sync', REQUEST_TIME);
+  return $groups;
 }
+
+//function _power_bi_reports_get_reports_options($group_id, \Tngnt\PBI\Client $client) {
+//  $reports_options = [];
+//  $endpoint = str_replace('{groupId}', $group_id, POWER_BI_REPORTS__REPORTS_IN_GROUP);
+//  $req = $client->request('GET', $endpoint);
+//  $response = $client->generateResponse($req);
+//  $resp_array = $response->toArray();
+//  $reports_raw = $resp_array['value'];
+//  foreach ($reports_raw as $report_raw) {
+//    $reports_options[$report_raw['id']] = $report_raw['name'];
+//  }
+//  return $reports_options;
+//}
 
 /**
  * Gets a valid auth token.
@@ -299,23 +310,23 @@ function power_bi_reports_get_auth_token($force_renew = FALSE) {
   }
 }
 
-function _power_bi_reports_get_groups_options($groups_raw) {
-  $groups_options = [];
-  foreach ($groups_raw as $group_raw) {
-    $groups_options[$group_raw['id']] = $group_raw['name'];
-  }
-  asort($groups_options);
-  return $groups_options;
-}
+//function _power_bi_reports_get_groups_options($groups_raw) {
+//  $groups_options = [];
+//  foreach ($groups_raw as $group_raw) {
+//    $groups_options[$group_raw['id']] = $group_raw['name'];
+//  }
+//  asort($groups_options);
+//  return $groups_options;
+//}
 
-function _power_bi_reports_normalize_groups($groups) {
-  $groups_sorted = [];
-  foreach ($groups as $group) {
-    $groups_sorted[$group['id']] = ['name' => $group['name']];
-  }
-  uasort($groups_sorted, function ($a, $b) {
-    return $a['name'] > $b['name'];
-  });
-  return $groups_sorted;
-}
+//function _power_bi_reports_normalize_groups($groups) {
+//  $groups_sorted = [];
+//  foreach ($groups as $group) {
+//    $groups_sorted[$group['id']] = ['name' => $group['name']];
+//  }
+//  uasort($groups_sorted, function ($a, $b) {
+//    return $a['name'] > $b['name'];
+//  });
+//  return $groups_sorted;
+//}
 
