@@ -31,33 +31,45 @@ function _power_bi_reports_field_formatter_view($entity_type, $entity, $field, $
 }
 
 function _power_bi_reports_simple_embed_formatter($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
-  $power_bi_reports_data = variable_get('power_bi_reports_data', FALSE);
+  $power_bi_reports_data = variable_get('power_bi_reports_data', FALSE); // @TODO use drupal_static, here and everywhere else
   if (!$power_bi_reports_data) {
     $power_bi_reports_data = power_bi_reports_sync_reports();
   }
-
 
   $element = [];
   foreach ($items as $delta => $item) {
     $report_id = $item['report_id'];
     $report_data = _power_bi_reports_get_report_data($report_id, $power_bi_reports_data);
+    $group_id = $report_data['group_id'];
+
     if (empty($report_data)) {
       throw new RuntimeException("Report '$report_id' not found."); // @TODO handle properly
     }
 
-    $aa = 'aa';
-
     $element[$delta] = [
-      // We create a render array to produce the desired markup,
-      // "<p style="color: #hexcolor">The color code ... #hexcolor</p>".
-      // See theme_html_tag().
       '#type' => 'html_tag',
-      '#tag' => 'p',
+      '#tag' => 'div',
       '#attributes' => [
-        'style' => 'color: ' . $item['rgb'],
+//        'allowfullscreen' => 'true',
+//        'width' => 1200,
+//        'frameborder' => 0,
+//        'height' => 1250,
+//        'scrolling' => "no",
+//        'src' => $report_data["report_data"]["embedUrl"],
+        'class' => [
+          "power-bi-report",
+        ],
+        'data-power-bi-delta' => $delta,
       ],
-      '#value' => t('The color code in this field is code'),
     ];
+
+    dpm($report_data["report_data"], 'report_data');
+
+    // @TODO handle this
+    $embed_token = power_bi_reports_get_report_embed_token($group_id, $report_id);
+    $embed_token_decoded = json_decode($embed_token);
+    dpm($embed_token_decoded, '$embed_token_decoded');
+
   }
   return $element;
 }
