@@ -5,7 +5,7 @@
   // https://github.com/Microsoft/PowerBI-JavaScript/wiki/Embedding-Basics
 
   Drupal.behaviors.power_bi_reports = {
-    attach: function(context, settings) {
+    attach: function (context, settings) {
       var that = this;
 
       var $reports = $("[data-power-bi-report-id]", context);
@@ -27,42 +27,54 @@
       // Read embed application token from textbox.
       var accessToken = 'AAAAAAAA'; // @TODO
 
-      // Get models. models contains enums that can be used.
-      var models = window['powerbi-client'].models;
+      var endpoint = '/power-bi-reports/get-embed-token/' + reportID;
+      var jqxhr = $.get(endpoint)
+          .done(function (data) {
+            accessToken = data;
 
-      // Embed configuration used to describe the what and how to embed.
-      // This object is used when calling powerbi.embed.
-      // This also includes settings and options such as filters.
-      // You can find more information at https://github.com/Microsoft/PowerBI-JavaScript/wiki/Embed-Configuration-Details.
-      var config = {
-        type: 'report',
-        tokenType: models.TokenType.Embed,
-        accessToken: accessToken,
-        embedUrl: embedUrl,
-        id: reportID,
-        // permissions: permissions,
-        // settings: {
-        //   filterPaneEnabled: true,
-        //   navContentPaneEnabled: true
-        // }
-      };
+            // Get models. models contains enums that can be used.
+            var models = window['powerbi-client'].models;
 
-      // Get a reference to the embedded report HTML element.
-      var embedContainer = $el.find('.power-bi-report')[0];
+            // Embed configuration used to describe the what and how to embed.
+            // This object is used when calling powerbi.embed.
+            // This also includes settings and options such as filters.
+            // You can find more information at
+            // https://github.com/Microsoft/PowerBI-JavaScript/wiki/Embed-Configuration-Details.
+            var config = {
+              type: 'report',
+              tokenType: models.TokenType.Embed,
+              accessToken: accessToken,
+              embedUrl: embedUrl,
+              id: reportID,
+              pageView: "fitToWidth",
+              // permissions: permissions,
+              // settings: {
+              //   filterPaneEnabled: true,
+              //   navContentPaneEnabled: true
+              // }
+            };
 
-      var $messages = $el.find('.power-bi-report-messages');
+            // Get a reference to the embedded report HTML element.
+            var embedContainer = $el.find('.power-bi-report')[0];
 
-      // Embed the report and display it within the div container.
-      var report = powerbi.embed(embedContainer, config);
+            var $messages = $el.find('.power-bi-report-messages');
 
-      // Report.off removes a given event handler if it exists.
-      report.off("loaded");
+            // Embed the report and display it within the div container.
+            var report = powerbi.embed(embedContainer, config);
 
-      report.on("error", function (event) {
-        console.error(event);
-        $messages.html($messages.html() + '<p>' + event.detail.detailedMessage + '</p>');
-        report.off("error");
-      });
+            // Report.off removes a given event handler if it exists.
+            report.off("loaded");
+
+            report.on("error", function (event) {
+              console.error(event);
+              $messages.html($messages.html() + '<p>' + event.detail.detailedMessage + '</p>');
+              report.off("error");
+            });
+
+          })
+          .fail(function () {
+            console.error("error");
+          });
     }
   };
 
