@@ -31,15 +31,10 @@ function _power_bi_reports_field_formatter_view($entity_type, $entity, $field, $
 }
 
 function _power_bi_reports_simple_embed_formatter($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
-  $power_bi_reports_data = variable_get('power_bi_reports_data', FALSE); // @TODO use drupal_static, here and everywhere else
-  if (!$power_bi_reports_data) {
-    $power_bi_reports_data = power_bi_reports_sync_reports();
-  }
-
   $element = [];
   foreach ($items as $delta => $item) {
     $report_id = $item['report_id'];
-    $report_data = _power_bi_reports_get_report_data($report_id, $power_bi_reports_data);
+    $report_data = _power_bi_reports_get_report_data($report_id);
     $group_id = $report_data['group_id'];
 
     if (empty($report_data)) {
@@ -47,43 +42,20 @@ function _power_bi_reports_simple_embed_formatter($entity_type, $entity, $field,
     }
 
     $element[$delta] = [
-      '#type' => 'html_tag',
-      '#tag' => 'div',
-      '#attributes' => [
-//        'allowfullscreen' => 'true',
-//        'width' => 1200,
-//        'frameborder' => 0,
-//        'height' => 1250,
-//        'scrolling' => "no",
-//        'src' => $report_data["report_data"]["embedUrl"],
-        'class' => [
-          "power-bi-report",
-        ],
-        'data-power-bi-delta' => $delta,
-      ],
+      '#theme' => 'power_bi_report',
+      '#report_id' => $report_id,
+      '#group_id' => $group_id,
+      '#embed_url' => $report_data["report_data"]["embedUrl"],
+      '#delta' => $delta,
     ];
-
-    dpm($report_data["report_data"], 'report_data');
-
-    // @TODO handle this
-    $embed_token = power_bi_reports_get_report_embed_token($group_id, $report_id);
-    $embed_token_decoded = json_decode($embed_token);
-    dpm($embed_token_decoded, '$embed_token_decoded');
-
   }
+
+  // Add the js file of the library.
+  $element['#attached']['libraries_load'][] = ['powerbi_javascript'];
+  // Add our custom js file.
+  $filepath = drupal_get_path('module', 'power_bi_reports') . '/js/power_bi_reports.js';
+  $element['#attached']['js'][$filepath] = ['weight' => 5000];
+
   return $element;
 }
 
-function _power_bi_reports_get_report_data($report_id, $power_bi_reports_data) {
-  foreach ($power_bi_reports_data as $group_id => $group) {
-    foreach ($group['reports'] as $report) {
-      if ($report['id'] == $report_id) {
-        return [
-          'group_id' => $group_id,
-          'report_data' => $report,
-        ];
-      }
-    }
-  }
-  return [];
-}
