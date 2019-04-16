@@ -1,7 +1,11 @@
 <?php
 
+use GuzzleHttp\Client;
+
 define('POWER_BI_REPORTS__GROUPS', 'https://api.powerbi.com/v1.0/myorg/groups');
 define('POWER_BI_REPORTS__REPORTS_IN_GROUP', 'https://api.powerbi.com/v1.0/myorg/groups/{groupId}/reports');
+define('POWER_BI_REPORTS__DATASETS_IN_GROUP', 'https://api.powerbi.com/v1.0/myorg/groups/{groupId}/datasets');
+define('POWER_BI_REPORTS__REPORT_EMBED_TOKEN', 'https://api.powerbi.com/v1.0/myorg/groups/{groupId}/reports/{reportId}/GenerateToken');
 
 /**
  * Implements hook_menu().
@@ -14,6 +18,7 @@ function power_bi_reports_menu() {
     'access arguments' => ['administer site configuration'], // @TODO
     'page callback' => 'drupal_get_form',
     'page arguments' => ['power_bi_reports_admin_form'],
+    'file' => 'power_bi_reports.admin.inc',
     'description' => 'Configure Power BI Reports module.',
   ];
   $items['admin/config/services/power-bi-reports/status'] = [
@@ -21,6 +26,7 @@ function power_bi_reports_menu() {
     'access arguments' => ['administer site configuration'], // @TODO
     'page callback' => 'drupal_get_form',
     'page arguments' => ['power_bi_reports_status_form'],
+    'file' => 'power_bi_reports.admin.inc',
     'description' => 'Power BI Reports status.',
   ];
   return $items;
@@ -79,43 +85,6 @@ function power_bi_reports_field_formatter_view($entity_type, $entity, $field, $i
   return _power_bi_reports_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display);
 }
 
-/**
- * Menu callback to configure module settings.
- */
-function power_bi_reports_admin_form($form, &$form_state) {
-  $form['power_bi_reports_tenant_id'] = [
-    '#type' => 'textfield',
-    '#title' => t('Tenant ID'),
-    '#default_value' => variable_get('power_bi_reports_tenant_id'),
-    '#required' => TRUE,
-  ];
-  $form['power_bi_reports_resource'] = [
-    '#type' => 'textfield',
-    '#title' => t('Resource'),
-    '#default_value' => variable_get('power_bi_reports_resource', 'https://analysis.windows.net/powerbi/api'),
-    '#required' => TRUE,
-  ];
-  $form['power_bi_reports_client_id'] = [
-    '#type' => 'textfield',
-    '#title' => t('Client ID'),
-    '#default_value' => variable_get('power_bi_reports_client_id'),
-    '#required' => TRUE,
-  ];
-  $form['power_bi_reports_username'] = [
-    '#type' => 'textfield',
-    '#title' => t('Username'),
-    '#default_value' => variable_get('power_bi_reports_username'),
-    '#required' => TRUE,
-  ];
-  $form['power_bi_reports_password'] = [ // @TODO fix this
-    '#type' => 'password',
-    '#title' => t('Password'),
-    '#default_value' => variable_get('power_bi_reports_password'),
-    '#required' => TRUE,
-  ];
-
-  return system_settings_form($form);
-}
 
 function power_bi_reports_get_form_element($form, &$form_state, $default_value = '') {
   $power_bi_reports_data = variable_get('power_bi_reports_data', FALSE);
@@ -134,69 +103,32 @@ function power_bi_reports_get_form_element($form, &$form_state, $default_value =
   return $element;
 }
 
-function power_bi_reports_status_form($form, &$form_state) {
-  $form = [];
-
-  $form['token_renew'] = [
-    '#markup' => '@TODO create a token renew button',
-  ];
-
-  $form['reports'] = power_bi_reports_get_form_element($form, $form_state);
-
-  $form['submit'] = [
-    '#type' => 'submit',
-    '#value' => 'Submit',
-  ];
-
-  return $form;
-}
-
-function power_bi_reports_status_form_submit($form, &$form_state) {
-  dpm($form, '$form');
-  dpm($form_state['values'], '$form_state values');
-}
-
 
 function power_bi_reports_sync_reports() {
   $groups = [];
-  // Get a token.
-  $token = power_bi_reports_get_auth_token();
 
-  // @TODO rename variables
-
-  $client = new \Tngnt\PBI\Client($token);
-  $greq = $client->request('GET', POWER_BI_REPORTS__GROUPS);
-  $gresponse = $client->generateResponse($greq);
-  $gresp_array = $gresponse->toArray();
-  $groups_raw = $gresp_array['value'];
+  $groups_raw = power_bi_reports_get_groups();
 
   foreach ($groups_raw as $group) {
     $group_id = $group['id'];
-    $endpoint = str_replace('{groupId}', $group_id, POWER_BI_REPORTS__REPORTS_IN_GROUP);
-    $rreq = $client->request('GET', $endpoint);
-    $rresponse = $client->generateResponse($rreq);
-    $rresp_array = $rresponse->toArray();
-    $reports = $rresp_array['value'];
+    $reports_in_group = power_bi_reports_get_reports_in_group($group_id);
     $groups[$group_id] = $group;
-    $groups[$group_id]['reports'] = $reports;
+    $groups[$group_id]['reports'] = $reports_in_group;
   }
   variable_set('power_bi_reports_data', $groups);
-  variable_set('power_bi_reports_last_sync', REQUEST_TIME);
+  variable_set('power_bi_reports_last_sync_reports', REQUEST_TIME);
   return $groups;
 }
 
-//function _power_bi_reports_get_reports_options($group_id, \Tngnt\PBI\Client $client) {
-//  $reports_options = [];
-//  $endpoint = str_replace('{groupId}', $group_id, POWER_BI_REPORTS__REPORTS_IN_GROUP);
-//  $req = $client->request('GET', $endpoint);
-//  $response = $client->generateResponse($req);
-//  $resp_array = $response->toArray();
-//  $reports_raw = $resp_array['value'];
-//  foreach ($reports_raw as $report_raw) {
-//    $reports_options[$report_raw['id']] = $report_raw['name'];
-//  }
-//  return $reports_options;
-//}
+function _power_bi_reports_get_grouped_options($power_bi_reports_data) {
+  $options = [];
+  foreach ($power_bi_reports_data as $group) {
+    foreach ($group['reports'] as $report) {
+      $options[$group['name']][$report['id']] = $report['name'];
+    }
+  }
+  return $options;
+}
 
 /**
  * Gets a valid auth token.
@@ -244,7 +176,7 @@ function power_bi_reports_get_auth_token($force_renew = FALSE) {
 
     if ($r->getStatusCode() != 200) {
       // @TODO handle error and return
-      return;
+      return FALSE;
     }
 
     $response_json = json_decode($r->getBody());
@@ -256,6 +188,114 @@ function power_bi_reports_get_auth_token($force_renew = FALSE) {
     variable_set('power_bi_reports_access_token', $token);
     return $token['token'];
   }
+}
+
+/**
+ * Gets an embed token for a report.
+ *
+ * @param $group_id
+ * @param $report_id
+ *
+ * @return bool|string
+ */
+function power_bi_reports_get_report_embed_token($group_id, $report_id) {
+  // Get a token.
+  $token = power_bi_reports_get_auth_token();
+
+  $endpoint = POWER_BI_REPORTS__REPORT_EMBED_TOKEN;
+  $endpoint = str_replace('{groupId}', $group_id, $endpoint);
+  $endpoint = str_replace('{reportId}', $report_id, $endpoint);
+
+  $body = [
+    'accessLevel' => 'View',
+  ];
+
+  $headers = [
+    "Authorization" => sprintf("Bearer %s", $token),
+  ];
+
+  $guzzle = new GuzzleHttp\Client();
+  $res = $guzzle->post(
+    $endpoint,
+    array(
+      'headers' => $headers,
+      'form_params' => $body,
+    )
+  );
+
+  if ($res->getStatusCode() == 200) {
+    $response_contents = $res->getBody()->getContents();
+    // @TODO handle good response!
+    return $response_contents;
+  }
+  else {
+    // @TODO handle errors
+    return FALSE;
+  }
+
+}
+
+function power_bi_reports_get_groups() {
+  // Get a token.
+  $token = power_bi_reports_get_auth_token();
+
+  $endpoint = POWER_BI_REPORTS__GROUPS;
+
+  $headers = [
+    "Authorization" => sprintf("Bearer %s", $token),
+  ];
+
+  $guzzle = new GuzzleHttp\Client();
+  $res = $guzzle->get(
+    $endpoint,
+    array(
+      'headers' => $headers,
+    )
+  );
+
+  if ($res->getStatusCode() == 200) {
+    $response_contents = $res->getBody()->getContents();
+    $response_contents_decoded = json_decode($response_contents, TRUE);
+    // @TODO handle good response!
+    return $response_contents_decoded['value'];
+  }
+  else {
+    // @TODO handle errors
+    return FALSE;
+  }
+}
+
+function power_bi_reports_get_reports_in_group($group_id) {
+  // Get a token.
+  $token = power_bi_reports_get_auth_token();
+
+  $endpoint = POWER_BI_REPORTS__REPORTS_IN_GROUP;
+  $endpoint = str_replace('{groupId}', $group_id, $endpoint);
+
+  $headers = [
+    "Authorization" => sprintf("Bearer %s", $token),
+  ];
+
+  $guzzle = new GuzzleHttp\Client();
+  $res = $guzzle->get(
+    $endpoint,
+    array(
+      'headers' => $headers,
+    )
+  );
+
+  if ($res->getStatusCode() == 200) {
+    $response_contents = $res->getBody()->getContents();
+    // @TODO handle good response!
+    $response_contents_decoded = json_decode($response_contents, TRUE);
+    // @TODO handle good response!
+    return $response_contents_decoded['value'];
+  }
+  else {
+    // @TODO handle errors
+    return FALSE;
+  }
+
 }
 
 //function _power_bi_reports_get_groups_options($groups_raw) {
