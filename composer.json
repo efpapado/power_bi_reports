@@ -1,6 +1,5 @@
 {
   "require": {
-    "guzzle/guzzle": "*",
-    "tangent-solutions/powerbi-sdk": "dev-master"
+    "guzzle/guzzle": "~3.0"
   }
 }
