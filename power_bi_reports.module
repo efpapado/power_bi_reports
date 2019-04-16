@@ -8,6 +8,27 @@ define('POWER_BI_REPORTS__DATASETS_IN_GROUP', 'https://api.powerbi.com/v1.0/myor
 define('POWER_BI_REPORTS__REPORT_EMBED_TOKEN', 'https://api.powerbi.com/v1.0/myorg/groups/{groupId}/reports/{reportId}/GenerateToken');
 
 /**
+ * Implements hook_libraries_info().
+ */
+function power_bi_reports_libraries_info() {
+  $libraries['powerbi_javascript'] = [
+    'name' => 'Microsoft/PowerBI-JavaScript',
+    'vendor url' => 'https://github.com/Microsoft/PowerBI-JavaScript',
+    'download url' => 'https://github.com/Microsoft/PowerBI-JavaScript',
+    'version arguments' => [
+      'file' => 'package.json',
+      'pattern' => '/"version":\\s+"([0-9\.]+)"/',
+      'lines' => 10,
+    ],
+    'files' => [
+      'js' => ['dist/powerbi.min.js'],
+    ],
+  ];
+
+  return $libraries;
+}
+
+/**
  * Implements hook_menu().
  *
  * Provides a configuration page.
@@ -217,10 +238,10 @@ function power_bi_reports_get_report_embed_token($group_id, $report_id) {
   $guzzle = new GuzzleHttp\Client();
   $res = $guzzle->post(
     $endpoint,
-    array(
+    [
       'headers' => $headers,
       'form_params' => $body,
-    )
+    ]
   );
 
   if ($res->getStatusCode() == 200) {
@@ -248,9 +269,9 @@ function power_bi_reports_get_groups() {
   $guzzle = new GuzzleHttp\Client();
   $res = $guzzle->get(
     $endpoint,
-    array(
+    [
       'headers' => $headers,
-    )
+    ]
   );
 
   if ($res->getStatusCode() == 200) {
@@ -279,9 +300,9 @@ function power_bi_reports_get_reports_in_group($group_id) {
   $guzzle = new GuzzleHttp\Client();
   $res = $guzzle->get(
     $endpoint,
-    array(
+    [
       'headers' => $headers,
-    )
+    ]
   );
 
   if ($res->getStatusCode() == 200) {
