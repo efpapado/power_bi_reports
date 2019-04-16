@@ -4,7 +4,6 @@ use GuzzleHttp\Client;
 
 define('POWER_BI_REPORTS__GROUPS', 'https://api.powerbi.com/v1.0/myorg/groups');
 define('POWER_BI_REPORTS__REPORTS_IN_GROUP', 'https://api.powerbi.com/v1.0/myorg/groups/{groupId}/reports');
-define('POWER_BI_REPORTS__DATASETS_IN_GROUP', 'https://api.powerbi.com/v1.0/myorg/groups/{groupId}/datasets');
 define('POWER_BI_REPORTS__REPORT_EMBED_TOKEN', 'https://api.powerbi.com/v1.0/myorg/groups/{groupId}/reports/{reportId}/GenerateToken');
 
 /**
@@ -49,6 +48,12 @@ function power_bi_reports_menu() {
     'page arguments' => ['power_bi_reports_status_form'],
     'file' => 'power_bi_reports.admin.inc',
     'description' => 'Power BI Reports status.',
+  ];
+  $items['power-bi-reports/get-embed-token/%'] = [
+    'page callback' => '_power_bi_reports_get_embed_token_callback',
+    'page arguments' => [2],
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
   ];
   return $items;
 }
@@ -106,6 +111,63 @@ function power_bi_reports_field_formatter_view($entity_type, $entity, $field, $i
   return _power_bi_reports_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display);
 }
 
+/**
+ * Returns HTML for the report rendering.
+ *
+ * @param array $variables
+ *   An associative array containing:
+ *   - report_id
+ *   - group_id
+ *   - embed_url
+ *   - delta
+ *
+ * @return string
+ */
+function theme_power_bi_report($variables) {
+  $report_id = $variables['report_id'];
+  $group_id = $variables['group_id'];
+  $embed_url = $variables['embed_url'];
+
+  $attributes = [];
+  $attributes['class'] = 'power-bi-report-wrapper';
+  $attributes['data-power-bi-report-id'] = $report_id;
+  $attributes['data-power-bi-group-id'] = $group_id;
+  $attributes['data-power-bi-embed-url'] = $embed_url;
+  if (isset($variables['delta'])) {
+    $attributes['data-delta'] = $variables['delta'];
+  }
+  // @see https://stackoverflow.com/a/11427592
+  $attributes_string = implode(' ', array_map(
+    function ($v, $k) {
+      return sprintf("%s=\"%s\"", $k, $v);
+    },
+    $attributes,
+    array_keys($attributes)
+  ));
+
+  $output = '<div ' . $attributes_string . '>
+      <div class="power-bi-report"></div>
+      <div class="power-bi-report-messages"></div>
+    </div>';
+
+  return $output;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function power_bi_reports_theme($existing, $type, $theme, $path) {
+  return [
+    'power_bi_report' => [
+      'variables' => [
+        'report_id' => NULL,
+        'group_id' => NULL,
+        'embed_url' => NULL,
+        'delta' => NULL,
+      ],
+    ],
+  ];
+}
 
 function power_bi_reports_get_form_element($form, &$form_state, $default_value = '') {
   $power_bi_reports_data = variable_get('power_bi_reports_data', FALSE);
@@ -212,6 +274,79 @@ function power_bi_reports_get_auth_token($force_renew = FALSE) {
 }
 
 /**
+ * Menu callback for `power-bi-reports/get-embed-token/%`
+ *
+ * Returns an embed token for the provided report.
+ *
+ * @param $report_id
+ */
+function _power_bi_reports_get_embed_token_callback($report_id) {
+  if (!power_bi_reports_validate_guid($report_id)) {
+    return drupal_json_output(FALSE);
+  }
+
+  // Check if there's a report with this guid synced in the system.
+  $report_data = _power_bi_reports_get_report_data($report_id);
+  if (empty($report_data)) {
+    return drupal_json_output(FALSE);
+  }
+
+  // First try to get a locally cached embed token.
+  $embed_token = power_bi_reports_get_local_report_embed_token($report_id);
+  if ($embed_token) {
+    return drupal_json_output($embed_token);
+  }
+
+  // Generate an embed token remotely, and then cache it locally.
+  $group_id = $report_data['group_id'];
+  $generated = power_bi_reports_generate_report_embed_token($group_id, $report_id);
+  if (!empty($generated)) {
+    return drupal_json_output($generated);
+  }
+
+  return drupal_json_output(FALSE);
+}
+
+function power_bi_reports_get_local_report_embed_token($report_id) {
+  $cid = 'power_bi_reports:' . $report_id;
+  $cache = cache_get($cid);
+
+  if ($cache && (time() <= $cache->expire)) {
+    return $cache->data;
+  }
+  return FALSE;
+}
+
+function power_bi_reports_set_local_report_embed_token($report_id, $token, $expiration) {
+  $cid = 'power_bi_reports:' . $report_id;
+  $timestamp = strtotime($expiration);
+  cache_set($cid, $token, 'cache', $timestamp);
+}
+
+function power_bi_reports_get_reports_data() {
+  $power_bi_reports_data = variable_get('power_bi_reports_data', FALSE); // @TODO use drupal_static, here and everywhere else
+  if (!$power_bi_reports_data) {
+    $power_bi_reports_data = power_bi_reports_sync_reports();
+  }
+  return $power_bi_reports_data;
+}
+
+function _power_bi_reports_get_report_data($report_id) {
+  $power_bi_reports_data = power_bi_reports_get_reports_data();
+  foreach ($power_bi_reports_data as $group_id => $group) {
+    foreach ($group['reports'] as $report) {
+      if ($report['id'] == $report_id) {
+        return [
+          'group_id' => $group_id,
+          'report_data' => $report,
+        ];
+      }
+    }
+  }
+  return [];
+}
+
+/**
  * Gets an embed token for a report.
  *
  * @param $group_id
@@ -219,7 +354,7 @@ function power_bi_reports_get_auth_token($force_renew = FALSE) {
  *
  * @return bool|string
  */
-function power_bi_reports_get_report_embed_token($group_id, $report_id) {
+function power_bi_reports_generate_report_embed_token($group_id, $report_id) {
   // Get a token.
   $token = power_bi_reports_get_auth_token();
 
@@ -227,13 +362,8 @@ function power_bi_reports_get_report_embed_token($group_id, $report_id) {
   $endpoint = str_replace('{groupId}', $group_id, $endpoint);
   $endpoint = str_replace('{reportId}', $report_id, $endpoint);
 
-  $body = [
-    'accessLevel' => 'View',
-  ];
-
-  $headers = [
-    "Authorization" => sprintf("Bearer %s", $token),
-  ];
+  $body = ['accessLevel' => 'View'];
+  $headers = ['Authorization' => sprintf("Bearer %s", $token)];
 
   $guzzle = new GuzzleHttp\Client();
   $res = $guzzle->post(
@@ -246,14 +376,25 @@ function power_bi_reports_get_report_embed_token($group_id, $report_id) {
 
   if ($res->getStatusCode() == 200) {
     $response_contents = $res->getBody()->getContents();
-    // @TODO handle good response!
-    return $response_contents;
+    $response_contents_decoded = json_decode($response_contents, TRUE);
+
+    $token = $response_contents_decoded['token'];
+    $expiration = $response_contents_decoded['expiration'];
+
+    // Cache it locally
+    power_bi_reports_set_local_report_embed_token($report_id, $token, $expiration);
+
+    return $token;
   }
   else {
     // @TODO handle errors
     return FALSE;
   }
 
+}
+
+function power_bi_reports_validate_guid($guid) {
+  return preg_match('/^\{?[A-Za-z0-9]{8}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{12}\}?$/', $guid);
 }
 
 function power_bi_reports_get_groups() {
@@ -318,24 +459,3 @@ function power_bi_reports_get_reports_in_group($group_id) {
   }
 
 }
-
-//function _power_bi_reports_get_groups_options($groups_raw) {
-//  $groups_options = [];
-//  foreach ($groups_raw as $group_raw) {
-//    $groups_options[$group_raw['id']] = $group_raw['name'];
-//  }
-//  asort($groups_options);
-//  return $groups_options;
-//}
-
-//function _power_bi_reports_normalize_groups($groups) {
-//  $groups_sorted = [];
-//  foreach ($groups as $group) {
-//    $groups_sorted[$group['id']] = ['name' => $group['name']];
-//  }
-//  uasort($groups_sorted, function ($a, $b) {
-//    return $a['name'] > $b['name'];
-//  });
-//  return $groups_sorted;
-//}
-

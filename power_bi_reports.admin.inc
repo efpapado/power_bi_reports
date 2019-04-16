@@ -127,7 +127,7 @@ function _power_bi_reports_status_get_group_element($group_data, $validate = FAL
       '#type' => 'markup',
     ];
     if ($validate) {
-      $embed_token = power_bi_reports_get_report_embed_token($group_id, $report_id);
+      $embed_token = power_bi_reports_generate_report_embed_token($group_id, $report_id);
       if ($embed_token) {
         $element[$group_id][$report_id]['details']['#markup'] = 'Report is OK'; // @TODO fix
       }
