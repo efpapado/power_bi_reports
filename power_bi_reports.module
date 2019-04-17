@@ -186,7 +186,11 @@ function power_bi_reports_get_form_element($form, &$form_state, $default_value =
   return $element;
 }
 
-
+/**
+ * Sync reports.
+ *
+ * @return array
+ */
 function power_bi_reports_sync_reports() {
   $groups = [];
 
@@ -434,6 +438,189 @@ function power_bi_reports_get_groups() {
   else {
     // @TODO handle errors
     return FALSE;
+  }
+}
+
+function power_bi_reports_batch_sync_reports_init() {
+  $batch = [
+    'operations' => [
+      ['power_bi_reports_batch_sync_reports', []],
+    ],
+
+    'finished' => 'power_bi_reports_batch_sync_reports_finished',
+    'title' => t('Reports synchronisation'),
+    'init_message' => t('Reports synchronisation is starting.'),
+    'progress_message' => t('Processed @current out of @total.'),
+    'error_message' => t('Reports synchronisation has encountered an error.'),
+  ];
+
+  batch_set($batch);
+  //    batch_process('node/1');
+}
+
+function power_bi_reports_renew_embed_tokens_init() {
+  $batch = [
+    'operations' => [
+      ['power_bi_reports_renew_embed_tokens', []],
+    ],
+
+    'finished' => 'power_bi_reports_renew_embed_tokens_finished',
+    'title' => t('Renew embed tokens'),
+    'init_message' => t('Renewing of embed tokens is starting.'),
+    'progress_message' => t('Processed @current out of @total.'),
+    'error_message' => t('Renewing of embed tokens has encountered an error.'),
+  ];
+
+  batch_set($batch);
+  //    batch_process('node/1');
+}
+
+function power_bi_reports_batch_sync_reports(&$context) {
+  if (!isset($context['sandbox']['progress'])) {
+    $groups_raw = power_bi_reports_get_groups();
+    $context['sandbox']['groups_raw'] = $groups_raw;
+    $context['sandbox']['progress'] = 0;
+    $context['sandbox']['max'] = count($groups_raw);
+  }
+
+  // Get the first group
+  $group_delta = key($context['sandbox']['groups_raw']);
+  $group_raw = $context['sandbox']['groups_raw'][$group_delta];
+  $group_id = $group_raw['id'];
+  $reports_in_group = power_bi_reports_get_reports_in_group($group_id);
+  // Remove the group from the array, so that it does not get processed again.
+  unset($context['sandbox']['groups_raw'][$group_delta]);
+
+  // Store some result for post-processing in the finished callback.
+  $context['results']['groups'][$group_id] = $group_raw;
+  $context['results']['groups'][$group_id]['reports'] = $reports_in_group;
+
+  // Update our progress information.
+  $context['sandbox']['progress']++;
+  $context['message'] = t('Syncing group %name (%guid)', [
+    '%name' => $group_raw['name'],
+    '%guid' => $group_id,
+  ]);
+
+  // Inform the batch engine that we are not finished,
+  // and provide an estimation of the completion level we reached.
+  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+    $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+  }
+}
+
+function power_bi_reports_renew_embed_tokens(&$context) {
+  if (!isset($context['sandbox']['progress'])) {
+    $reports_data = variable_get('power_bi_reports_data', []);
+    if (empty($reports_data)) {
+      $context['results']['error'] = t('You have to sync the reports before you renew the embed tokens.');
+      $context['finished'] = 1;
+      return;
+    }
+
+    // Flatten out the list.
+    $to_sync = [];
+    foreach ($reports_data as $group_id => $group) {
+      foreach ($group['reports'] as $report) {
+        $report_id = $report['id'];
+        $to_sync[] = [
+          'group_id' => $group_id,
+          'report_id' => $report_id,
+          'report_name' => $report['name'],
+        ];
+      }
+    }
+
+    $context['sandbox']['to_sync'] = $to_sync;
+    $context['sandbox']['progress'] = 0;
+    $context['sandbox']['max'] = count($to_sync);
+  }
+
+  // Get the first report
+  $report_delta = key($context['sandbox']['to_sync']);
+  $report_raw = $context['sandbox']['to_sync'][$report_delta];
+  $group_id = $report_raw['group_id'];
+  $report_id = $report_raw['report_id'];
+  try {
+    $token = power_bi_reports_generate_report_embed_token($group_id, $report_id);
+    // Store some result for post-processing in the finished callback.
+    $context['results']['tokens'][$report_id] = $token;
+  }
+  catch (Exception $e) {
+    $context['results']['fails'][] = [
+      'report' => $report_raw,
+      'error' => $e->getMessage(),
+    ];
+  }
+
+  // Remove the report from the array, so that it does not get processed again.
+  unset($context['sandbox']['to_sync'][$report_delta]);
+
+  // Update our progress information.
+  $context['sandbox']['progress']++;
+  $context['message'] = t('Renewing embed token for report %name (%guid)', [
+    '%name' => $report_raw['report_name'],
+    '%guid' => $report_id,
+  ]);
+
+  // Inform the batch engine that we are not finished,
+  // and provide an estimation of the completion level we reached.
+  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+    $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+  }
+}
+
+function power_bi_reports_batch_sync_reports_finished($success, $results, $operations) {
+  if ($success) {
+    variable_set('power_bi_reports_data', $results['groups']);
+    variable_set('power_bi_reports_last_sync_reports', REQUEST_TIME);
+    $message = t('Reports successfully synced.');
+    drupal_set_message($message);
+  }
+  else {
+    // An error occurred.
+    // $operations contains the operations that remained unprocessed.
+    $error_operation = reset($operations);
+    $message = t('An error occurred while processing %error_operation with arguments: @arguments', [
+      '%error_operation' => $error_operation[0],
+      '@arguments' => print_r($error_operation[1], TRUE),
+    ]);
+    drupal_set_message($message, 'error');
+    watchdog('power_bi_reports', $message, [], WATCHDOG_ERROR);
+  }
+}
+
+function power_bi_reports_renew_embed_tokens_finished($success, $results, $operations) {
+  if ($success) {
+    if (isset($results['error'])) {
+      drupal_set_message($results['error'], 'error');
+      watchdog('power_bi_reports', $results['error'], [], WATCHDOG_ERROR);
+    }
+    else {
+      $message = t('Embed tokens successfully renewed.');
+      drupal_set_message($message);
+    }
+    if (isset($results["fails"])) {
+      $message = t('<p>Warning, the embed tokens for the following reports could not be renewed:</p>');
+      $message .= '<ul>';
+      foreach ($results["fails"] as $fail) {
+        $message .= "<li>{$fail['report']['report_name']} (report ID: {$fail['report']['report_id']} - group ID: {$fail['report']['group_id']})</li>";
+      }
+      $message .= '<ul>';
+      drupal_set_message($message, 'warning');
+      watchdog('power_bi_reports', $message, [], WATCHDOG_WARNING);
+    }
+  }
+  else {
+    // An error occurred.
+    // $operations contains the operations that remained unprocessed.
+    $error_operation = reset($operations);
+    $message = t('An error occurred while processing %error_operation with arguments: @arguments', [
+      '%error_operation' => $error_operation[0],
+      '@arguments' => print_r($error_operation[1], TRUE),
+    ]);
+    drupal_set_message($message, 'error');
+    watchdog('power_bi_reports', $message, [], WATCHDOG_ERROR);
   }
 }
 

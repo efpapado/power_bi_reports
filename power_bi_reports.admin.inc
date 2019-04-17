@@ -83,11 +83,18 @@ function power_bi_reports_status_form($form, &$form_state) {
     $form['reports_last_sync']['#markup'] = t('The reports have never been synced.');
   }
 
-  // Sync reports button.
-  $form['sync_reports'] = [
+  // Batch sync reports button.
+  $form['batch_sync_reports'] = [
     '#type' => 'submit',
-    '#name' => 'sync_reports',
-    '#value' => t('Sync reports'),
+    '#name' => 'batch_sync_reports',
+    '#value' => t('Batch sync reports'),
+  ];
+
+  // Batch sync reports button.
+  $form['renew_embed_tokens'] = [
+    '#type' => 'submit',
+    '#name' => 'renew_embed_tokens',
+    '#value' => t('Renew embed tokens'),
   ];
 
   // List of reports, groupped by group.
@@ -95,14 +102,14 @@ function power_bi_reports_status_form($form, &$form_state) {
     '#type' => 'container',
     '#prefix' => "<h2>" . t('Available reports') . "</h2>",
   ];
-  $local_reports = variable_get('power_bi_reports_data');
-  foreach ($local_reports as $group_id => $group_data) {
-    $group_element = _power_bi_reports_status_get_group_element($group_data, $validate = FALSE);
-    $form['groups_reports'][] = $group_element;
-  }
+//  $local_reports = variable_get('power_bi_reports_data');
+//  foreach ($local_reports as $group_id => $group_data) {
+//    $group_element = _power_bi_reports_status_get_group_element($group_data, $validate = FALSE);
+//    $form['groups_reports'][] = $group_element;
+//  }
 
   // Reports form element.
-  $form['reports'] = power_bi_reports_get_form_element($form, $form_state);
+//  $form['reports'] = power_bi_reports_get_form_element($form, $form_state);
 
   return $form;
 }
@@ -110,8 +117,11 @@ function power_bi_reports_status_form($form, &$form_state) {
 function power_bi_reports_status_form_submit($form, &$form_state) {
   $trigger = $form_state['triggering_element'];
 
-  if ($trigger["#name"] == 'sync_reports') {
-    power_bi_reports_sync_reports();
+  if ($trigger["#name"] == 'batch_sync_reports') {
+    power_bi_reports_batch_sync_reports_init();
+  }
+  elseif ($trigger["#name"] == 'renew_embed_tokens') {
+    power_bi_reports_renew_embed_tokens_init();
   }
   elseif ($trigger["#name"] == 'token_renew') {
     $token_renew = power_bi_reports_get_auth_token(TRUE);
