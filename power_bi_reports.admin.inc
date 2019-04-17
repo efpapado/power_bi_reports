@@ -28,14 +28,33 @@ function power_bi_reports_admin_form($form, &$form_state) {
     '#default_value' => variable_get('power_bi_reports_username'),
     '#required' => TRUE,
   ];
-  $form['power_bi_reports_password'] = [ // @TODO fix this
+  $existing_password = variable_get('power_bi_reports_password', '');
+  $form['power_bi_reports_password'] = [
     '#type' => 'password',
     '#title' => t('Password'),
-    '#default_value' => variable_get('power_bi_reports_password'),
-    '#required' => TRUE,
+    '#required' => !$existing_password,
   ];
 
+  $form['#submit'][] = 'power_bi_reports_admin_form_submit';
+
   return system_settings_form($form);
+}
+
+/**
+ * Admin form submit callback.
+ *
+ * If there's already a stored password and the user left the field empty, make
+ * sure that the password will not be deleted.
+ * 
+ * @param $form
+ * @param $form_state
+ */
+function power_bi_reports_admin_form_submit($form, &$form_state) {
+  $existing_password = variable_get('power_bi_reports_password', '');
+  $typed_password = $form_state['values']['power_bi_reports_password'];
+  if ($existing_password && !$typed_password) {
+    $form_state['values']['power_bi_reports_password'] = $existing_password;
+  }
 }
 
 /**
