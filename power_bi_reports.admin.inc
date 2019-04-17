@@ -102,11 +102,11 @@ function power_bi_reports_status_form($form, &$form_state) {
     '#type' => 'container',
     '#prefix' => "<h2>" . t('Available reports') . "</h2>",
   ];
-//  $local_reports = variable_get('power_bi_reports_data');
-//  foreach ($local_reports as $group_id => $group_data) {
-//    $group_element = _power_bi_reports_status_get_group_element($group_data, $validate = FALSE);
-//    $form['groups_reports'][] = $group_element;
-//  }
+  $local_reports = variable_get('power_bi_reports_data');
+  foreach ($local_reports as $group_id => $group_data) {
+    $group_element = _power_bi_reports_status_get_group_element($group_data);
+    $form['groups_reports'][] = $group_element;
+  }
 
   // Reports form element.
 //  $form['reports'] = power_bi_reports_get_form_element($form, $form_state);
@@ -135,7 +135,7 @@ function power_bi_reports_status_form_submit($form, &$form_state) {
   }
 }
 
-function _power_bi_reports_status_get_group_element($group_data, $validate = FALSE) {
+function _power_bi_reports_status_get_group_element($group_data) {
   $group_id = $group_data['id'];
   $element[$group_id] = [
     '#type' => 'fieldset',
@@ -147,6 +147,9 @@ function _power_bi_reports_status_get_group_element($group_data, $validate = FAL
   foreach ($group_reports as $report_data) {
     $report_id = $report_data['id'];
     $report_name = $report_data['name'];
+
+    $embed_token = power_bi_reports_get_local_report_embed_token($report_id, $check_expiration = FALSE);
+
     $element[$group_id][$report_id] = [
       '#type' => 'fieldset',
       '#title' => $report_name,
@@ -155,14 +158,11 @@ function _power_bi_reports_status_get_group_element($group_data, $validate = FAL
     $element[$group_id][$report_id]['details'] = [
       '#type' => 'markup',
     ];
-    if ($validate) {
-      $embed_token = power_bi_reports_generate_report_embed_token($group_id, $report_id);
-      if ($embed_token) {
-        $element[$group_id][$report_id]['details']['#markup'] = 'Report is OK'; // @TODO fix
-      }
-      else {
-        $element[$group_id][$report_id]['details']['#markup'] = '<strong>Report is NOT OK</strong>'; // @TODO fix
-      }
+    if (!$embed_token) {
+      $msg = t('Possible report problem');
+      $element[$group_id][$report_id]['details']['#markup'] = '<div class="messages warning">' . $msg . '</div>';
+      $msg = t('There is not a locally cached embed token for this report. If the message persists after you renew the embed tokens, it might indicate that you don\'t have the necessary access to embed this report.');
+      $element[$group_id][$report_id]['details']['#markup'] .= '<em>' . $msg . '</em>';
     }
   }
   return $element;

@@ -311,13 +311,21 @@ function _power_bi_reports_get_embed_token_callback($report_id) {
   return drupal_json_output(FALSE);
 }
 
-function power_bi_reports_get_local_report_embed_token($report_id) {
+function power_bi_reports_get_local_report_embed_token($report_id, $check_expiration = TRUE) {
   $cid = 'power_bi_reports:' . $report_id;
   $cache = cache_get($cid);
 
-  if ($cache && (time() <= $cache->expire)) {
-    return $cache->data;
+  if ($cache) {
+    if (!$check_expiration) {
+      return $cache->data;
+    }
+    else {
+      if (time() <= $cache->expire) {
+        return $cache->data;
+      }
+    }
   }
+
   return FALSE;
 }
 
