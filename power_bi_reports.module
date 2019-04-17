@@ -449,6 +449,68 @@ function power_bi_reports_get_groups() {
   }
 }
 
+/**
+ * Implements hook_cron().
+ */
+function power_bi_reports_cron() {
+  // Renew the embed tokens.
+  $power_bi_reports_data = variable_get('power_bi_reports_data', []);
+  if (!empty($power_bi_reports_data)) {
+    $queue_embed_tokens = DrupalQueue::get("power_bi_reports_renew_embed_token");
+    foreach ($power_bi_reports_data as $group_id => $group) {
+      foreach ($group['reports'] as $report) {
+        $report_id = $report['id'];
+        $queue_embed_tokens->createItem(
+          [
+            'group_id' => $group_id,
+            'report_id' => $report_id,
+          ]
+        );
+      }
+    }
+  }
+
+  // Sync the reports.
+  $queue_sync_reports = DrupalQueue::get("power_bi_reports_batch_sync_reports");
+  $queue_sync_reports->createItem([]);
+}
+
+/**
+ * Implements hook_cron_queue_info().
+ */
+function power_bi_reports_cron_queue_info() {
+  $queues['power_bi_reports_renew_embed_token'] = [
+    'worker callback' => 'power_bi_reports_renew_embed_token_worker',
+    'time' => 2 * 60, // 2 minutes
+  ];
+  $queues['power_bi_reports_batch_sync_reports'] = [
+    'worker callback' => 'power_bi_reports_batch_sync_reports_worker',
+    'time' => 10 * 60, // 10 minutes
+  ];
+  return $queues;
+}
+
+function power_bi_reports_batch_sync_reports_worker($item) {
+  $last_sync = variable_get('power_bi_reports_last_sync_reports', REQUEST_TIME);
+  if ($last_sync < (REQUEST_TIME + 3000)) { // Every 50 minutes
+    power_bi_reports_batch_sync_reports_init();
+  }
+}
+
+function power_bi_reports_renew_embed_token_worker($data) {
+  $report_id = $data['report_id'];
+  $group_id = $data['group_id'];
+
+  try {
+    $token = power_bi_reports_generate_report_embed_token($group_id, $report_id);
+    // Store some result for post-processing in the finished callback.
+    $context['results']['tokens'][$report_id] = $token;
+  } catch (Exception $e) {
+    $msg = $e->getMessage();
+    watchdog('power_bi_reports', $msg, [], WATCHDOG_ERROR);
+  }
+}
+
 function power_bi_reports_batch_sync_reports_init() {
   $batch = [
     'operations' => [
@@ -553,8 +615,7 @@ function power_bi_reports_renew_embed_tokens(&$context) {
     $token = power_bi_reports_generate_report_embed_token($group_id, $report_id);
     // Store some result for post-processing in the finished callback.
     $context['results']['tokens'][$report_id] = $token;
-  }
-  catch (Exception $e) {
+  } catch (Exception $e) {
     $context['results']['fails'][] = [
       'report' => $report_raw,
       'error' => $e->getMessage(),
