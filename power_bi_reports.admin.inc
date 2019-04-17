@@ -45,7 +45,7 @@ function power_bi_reports_admin_form($form, &$form_state) {
  *
  * If there's already a stored password and the user left the field empty, make
  * sure that the password will not be deleted.
- * 
+ *
  * @param $form
  * @param $form_state
  */

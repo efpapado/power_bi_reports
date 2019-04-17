@@ -391,6 +391,16 @@ function power_bi_reports_generate_report_embed_token($group_id, $report_id) {
 
 }
 
+/**
+ * Helper function: Validates if the provided string is a valid guid.
+ *
+ * @see https://en.wikipedia.org/wiki/Universally_unique_identifier
+ * @see https://stackoverflow.com/a/1253417
+ *
+ * @param $guid
+ *
+ * @return false|int
+ */
 function power_bi_reports_validate_guid($guid) {
   return preg_match('/^\{?[A-Za-z0-9]{8}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{12}\}?$/', $guid);
 }
