@@ -1,7 +1,5 @@
 <?php
 
-use Guzzle\Http\Client;
-
 define('POWER_BI_REPORTS__GROUPS', 'https://api.powerbi.com/v1.0/myorg/groups');
 define('POWER_BI_REPORTS__REPORTS_IN_GROUP', 'https://api.powerbi.com/v1.0/myorg/groups/{groupId}/reports');
 define('POWER_BI_REPORTS__REPORT_EMBED_TOKEN', 'https://api.powerbi.com/v1.0/myorg/groups/{groupId}/reports/{reportId}/GenerateToken');
@@ -253,7 +251,7 @@ function power_bi_reports_get_auth_token($force_renew = FALSE) {
   }
   else {
     // Get a new token.
-    $client = new Client();
+    $client = new GuzzleHttp\Client();
 
     $tenant_id = variable_get('power_bi_reports_tenant_id');
     $endpoint = "https://login.windows.net/$tenant_id/oauth2/token";
@@ -392,7 +390,7 @@ function power_bi_reports_generate_report_embed_token($group_id, $report_id) {
   $body = ['accessLevel' => 'View'];
   $headers = ['Authorization' => sprintf("Bearer %s", $token)];
 
-  $guzzle = new Client();
+  $guzzle = new GuzzleHttp\Client();
   $res = $guzzle->post(
     $endpoint,
     [
@@ -444,7 +442,7 @@ function power_bi_reports_get_groups() {
     "Authorization" => sprintf("Bearer %s", $token),
   ];
 
-  $guzzle = new Client();
+  $guzzle = new GuzzleHttp\Client();
   $res = $guzzle->get(
     $endpoint,
     [
@@ -719,7 +717,7 @@ function power_bi_reports_get_reports_in_group($group_id) {
     "Authorization" => sprintf("Bearer %s", $token),
   ];
 
-  $guzzle = new Client();
+  $guzzle = new GuzzleHttp\Client();
   $res = $guzzle->get(
     $endpoint,
     [
