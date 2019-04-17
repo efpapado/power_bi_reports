@@ -61,6 +61,11 @@ function power_bi_reports_admin_form_submit($form, &$form_state) {
  * Menu callback to get module status.
  */
 function power_bi_reports_status_form($form, &$form_state) {
+  if (!power_bi_reports_is_configured()) {
+    $msg = t('You have been redirected to the settings form.');
+    drupal_set_message($msg, 'warning');
+    drupal_goto('admin/config/services/power-bi-reports/settings');
+  }
   $form = [];
 
   $form['token_renew'] = [

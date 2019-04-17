@@ -37,17 +37,25 @@ function power_bi_reports_menu() {
     'title' => 'Power BI Reports',
     'access arguments' => ['administer site configuration'], // @TODO
     'page callback' => 'drupal_get_form',
+    'page arguments' => ['power_bi_reports_status_form'],
+    'file' => 'power_bi_reports.admin.inc',
+    'description' => 'Power BI Reports status and configuration.',
+    'type' => MENU_NORMAL_ITEM,
+  ];
+  $items['admin/config/services/power-bi-reports/status'] = [
+    'title' => 'Power BI Reports status',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => 1,
+  ];
+  $items['admin/config/services/power-bi-reports/settings'] = [
+    'title' => 'Settings',
+    'access arguments' => ['administer site configuration'], // @TODO
+    'page callback' => 'drupal_get_form',
     'page arguments' => ['power_bi_reports_admin_form'],
     'file' => 'power_bi_reports.admin.inc',
     'description' => 'Configure Power BI Reports module.',
-  ];
-  $items['admin/config/services/power-bi-reports/status'] = [
-    'title' => 'Power BI Reports',
-    'access arguments' => ['administer site configuration'], // @TODO
-    'page callback' => 'drupal_get_form',
-    'page arguments' => ['power_bi_reports_status_form'],
-    'file' => 'power_bi_reports.admin.inc',
-    'description' => 'Power BI Reports status.',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 2,
   ];
   $items['power-bi-reports/get-embed-token/%'] = [
     'page callback' => '_power_bi_reports_get_embed_token_callback',
@@ -109,6 +117,13 @@ function power_bi_reports_field_formatter_info() {
 function power_bi_reports_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
   require_once 'power_bi_reports.formatters.inc';
   return _power_bi_reports_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display);
+}
+
+function power_bi_reports_is_configured() {
+  return variable_get('power_bi_reports_tenant_id') &&
+    variable_get('power_bi_reports_client_id') &&
+    variable_get('power_bi_reports_username') &&
+    variable_get('power_bi_reports_password');
 }
 
 /**
