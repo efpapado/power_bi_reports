@@ -234,8 +234,6 @@ function power_bi_reports_get_auth_token($force_renew = FALSE) {
   }
   else {
     // Get a new token.
-    $client = new GuzzleHttp\Client();
-
     $tenant_id = variable_get('power_bi_reports_tenant_id');
     $endpoint = "https://login.windows.net/$tenant_id/oauth2/token";
     $resource = variable_get('power_bi_reports_resource');
@@ -243,26 +241,26 @@ function power_bi_reports_get_auth_token($force_renew = FALSE) {
     $username = variable_get('power_bi_reports_username');
     $password = variable_get('power_bi_reports_password');
 
-    $r = $client->post(
-      $endpoint,
-      [
-        'form_params' => [
-          'resource' => $resource,
-          'client_id' => $client_id,
-          'grant_type' => 'password',
-          'username' => $username,
-          'password' => $password,
-          'scope' => 'openid',
-        ],
-      ]
-    );
+    $data = [
+      'resource' => $resource,
+      'client_id' => $client_id,
+      'grant_type' => 'password',
+      'username' => $username,
+      'password' => $password,
+      'scope' => 'openid',
+    ];
+    $options = [
+      'method' => 'POST',
+      'data' => drupal_http_build_query($data),
+    ];
+    $result = drupal_http_request($endpoint, $options);
 
-    if ($r->getStatusCode() != 200) {
-      // @TODO handle error and return
+    if ($result->code != 200) {
+      watchdog('power_bi_reports', 'ERROR: Could not renew access token.', [], WATCHDOG_ERROR);
       return FALSE;
     }
 
-    $response_json = json_decode($r->getBody());
+    $response_json = json_decode($result->data);
     $token = [
       'expires' => $response_json->expires_on,
       'token' => $response_json->access_token,
