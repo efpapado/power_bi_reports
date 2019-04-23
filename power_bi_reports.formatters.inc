@@ -32,6 +32,9 @@ function _power_bi_reports_field_formatter_view($entity_type, $entity, $field, $
 
 function _power_bi_reports_simple_embed_formatter($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
   $element = [];
+
+  $filepath = drupal_get_path('module', 'power_bi_reports') . '/js/power_bi_reports.js';
+
   foreach ($items as $delta => $item) {
     $report_id = $item['report_id'];
     $report_data = _power_bi_reports_get_report_data($report_id);
@@ -47,14 +50,20 @@ function _power_bi_reports_simple_embed_formatter($entity_type, $entity, $field,
       '#group_id' => $group_id,
       '#embed_url' => $report_data["report_data"]["embedUrl"],
       '#delta' => $delta,
+      '#attached' => [
+        'libraries_load' => [
+          // Add the js file of the library.
+          'powerbi_javascript',
+        ],
+        'js' => [
+          // Add our custom js file.
+          $filepath => [
+            'weight' => 5000,
+          ],
+        ],
+      ],
     ];
   }
-
-  // Add the js file of the library.
-  $element['#attached']['libraries_load'][] = ['powerbi_javascript'];
-  // Add our custom js file.
-  $filepath = drupal_get_path('module', 'power_bi_reports') . '/js/power_bi_reports.js';
-  $element['#attached']['js'][$filepath] = ['weight' => 5000];
 
   return $element;
 }
