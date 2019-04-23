@@ -6,7 +6,7 @@
 function _power_bi_reports_field_formatter_info() {
   $info = [];
   $info['power_bi_reports_simple_embed_formatter'] = [
-    'label' => t('Simple text-based formatter'),
+    'label' => t('JS formatter'),
     'field types' => ['power_bi_reports_report'],
   ];
   return $info;
