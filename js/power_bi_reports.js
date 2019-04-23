@@ -72,8 +72,8 @@
             });
 
           })
-          .fail(function () {
-            console.error("error");
+          .fail(function (e) {
+            console.error(e);
           });
     }
   };
