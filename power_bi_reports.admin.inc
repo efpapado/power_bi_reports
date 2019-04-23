@@ -35,6 +35,13 @@ function power_bi_reports_admin_form($form, &$form_state) {
     '#required' => !$existing_password,
   ];
 
+  $form['power_bi_reports_cron_sync'] = [
+    '#type' => 'checkbox',
+    '#title' => t('Sync embed tokens with cron'),
+    '#description' => t('Should the embed tokens be constantly updated with cron?'),
+    '#default_value' => variable_get('power_bi_reports_cron_sync', FALSE),
+  ];
+
   $form['#submit'][] = 'power_bi_reports_admin_form_submit';
 
   return system_settings_form($form);

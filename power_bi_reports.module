@@ -466,19 +466,22 @@ function power_bi_reports_get_groups() {
  * Implements hook_cron().
  */
 function power_bi_reports_cron() {
-  // Renew the embed tokens.
-  $power_bi_reports_data = variable_get('power_bi_reports_data', []);
-  if (!empty($power_bi_reports_data)) {
-    $queue_embed_tokens = DrupalQueue::get("power_bi_reports_renew_embed_token");
-    foreach ($power_bi_reports_data as $group_id => $group) {
-      foreach ($group['reports'] as $report) {
-        $report_id = $report['id'];
-        $queue_embed_tokens->createItem(
-          [
-            'group_id' => $group_id,
-            'report_id' => $report_id,
-          ]
-        );
+  $cron_enabled = variable_get('power_bi_reports_cron_sync', FALSE);
+  if ($cron_enabled) {
+    // Renew the embed tokens.
+    $power_bi_reports_data = variable_get('power_bi_reports_data', []);
+    if (!empty($power_bi_reports_data)) {
+      $queue_embed_tokens = DrupalQueue::get("power_bi_reports_renew_embed_token");
+      foreach ($power_bi_reports_data as $group_id => $group) {
+        foreach ($group['reports'] as $report) {
+          $report_id = $report['id'];
+          $queue_embed_tokens->createItem(
+            [
+              'group_id' => $group_id,
+              'report_id' => $report_id,
+            ]
+          );
+        }
       }
     }
   }
